@@ -100,6 +100,21 @@ func (p *AsyncBatcher) wrapAckFns() AsyncAckFn {
 
 // ReadWithContext attempts to read a new message from the source.
 func (p *AsyncBatcher) ReadWithContext(ctx context.Context) (types.Message, AsyncAckFn, error) {
+	for {
+		msg, ackFn, err := p.read(ctx)
+		if err != nil {
+			if err == types.ErrTimeout {
+				continue
+			}
+
+			return nil, nil, err
+		}
+
+		return msg, ackFn, nil
+	}
+}
+
+func (p *AsyncBatcher) read(ctx context.Context) (types.Message, AsyncAckFn, error) {
 	var forcedBatchDeadline time.Time
 	if tout := p.batcher.UntilNext(); tout >= 0 {
 		forcedBatchDeadline = time.Now().Add(tout)
@@ -117,9 +132,7 @@ func (p *AsyncBatcher) ReadWithContext(ctx context.Context) (types.Message, Asyn
 					return batch, p.wrapAckFns(), nil
 				}
 			}
-			if err == types.ErrTimeout {
-				continue
-			}
+
 			if err == types.ErrTypeClosed {
 				if batch := p.batcher.Flush(); batch != nil && batch.Len() > 0 {
 					return batch, p.wrapAckFns(), nil

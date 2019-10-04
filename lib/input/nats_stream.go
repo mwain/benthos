@@ -64,11 +64,18 @@ You can access these metadata fields using
 
 // NewNATSStream creates a new NATSStream input type.
 func NewNATSStream(conf Config, mgr types.Manager, log log.Modular, stats metrics.Type) (Type, error) {
-	n, err := reader.NewNATSStream(conf.NATSStream, log, stats)
-	if err != nil {
+	var a reader.Async
+	var err error
+
+	if a, err = reader.NewNATSStream(conf.NATSStream, log, stats); err != nil {
 		return nil, err
 	}
-	return NewReader("nats_stream", n, log, stats)
+
+	a = reader.NewAsyncBundleUnacks(a)
+	if a, err = reader.NewAsyncBatcher(conf.NATSStream.Batching, a, mgr, log, stats); err != nil {
+		return nil, err
+	}
+	return NewAsyncReader("nats_stream", false, a, log, stats)
 }
 
 //------------------------------------------------------------------------------
